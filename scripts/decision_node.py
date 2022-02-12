@@ -112,9 +112,15 @@ class Condition:
         self.info_enemy_sub = rospy.Subscriber('Info_enemy', Float32MultiArray, self.callback_enemy)
         self.info_obstacle_sub = rospy.Subscriber('Info_obstacle', Float32MultiArray, self.callback_obstacle)
         self.enemyCondition = EnemyCondition()
+        self.attitude_pub = rospy.Publisher('attitude_enemy', Int32)
 
     def update(self):
         #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+        if self.enemyCondition.getAttitude() == EnemyAttitudeIdx.FRONT:
+            rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+            self.attitude_pub.publish(1)
+        else:
+            self.attitude_pub.publish(0)
         return
 
     def getEnemyAttitude(self):
@@ -178,7 +184,16 @@ class BasicRun():
         # velocity publisher
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
         self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
+
+        self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', Int32, self.callback_attitude)
+
         rospy.loginfo("BasicRun")
+    
+    def callback_attitude(self,isFront):
+        if isFront == 1:
+            rospy.loginfo("Found")
+            self.client.cancel_all_goals()
+        return
 
     def execute(self, condition):
         r = rospy.Rate(5) # change speed 5fps
@@ -187,6 +202,10 @@ class BasicRun():
         rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
         result = self.setGoal(x,y,th)
         rospy.loginfo("waypoint result : {}".format(result))
+
+
+        rospy.loginfo("waypoint result : {}".format(result))
+        condition.getEnemyAttitude()
 
         if condition.getEnemyAttitude() == EnemyAttitudeIdx.FRONT:
             return False
