@@ -112,15 +112,18 @@ class Condition:
         self.info_enemy_sub = rospy.Subscriber('Info_enemy', Float32MultiArray, self.callback_enemy)
         self.info_obstacle_sub = rospy.Subscriber('Info_obstacle', Float32MultiArray, self.callback_obstacle)
         self.enemyCondition = EnemyCondition()
-        self.attitude_pub = rospy.Publisher('attitude_enemy', Int32)
+        self.attitude_pub = rospy.Publisher('attitude_enemy', String)
 
     def update(self):
         #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
         if self.enemyCondition.getAttitude() == EnemyAttitudeIdx.FRONT:
             rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-            self.attitude_pub.publish(1)
+            self.attitude_pub.publish("FRONT")
+        elif self.enemyCondition.getAttitude() == EnemyAttitudeIdx.SIDE:
+            rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+            self.attitude_pub.publish("SIDE")
         else:
-            self.attitude_pub.publish(0)
+            self.attitude_pub.publish("NOT FOUND")
         return
 
     def getEnemyAttitude(self):
@@ -185,12 +188,15 @@ class BasicRun():
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
         self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
 
-        self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', Int32, self.callback_attitude)
+        self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', String, self.callback_attitude)
 
         rospy.loginfo("BasicRun")
     
     def callback_attitude(self,isFront):
-        if isFront == 1:
+        isFront = str(isFront)
+
+        rospy.loginfo(isFront)
+        if "FRONT" in isFront:
             rospy.loginfo("Found")
             self.client.cancel_all_goals()
         return
