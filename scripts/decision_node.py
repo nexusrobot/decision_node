@@ -15,6 +15,7 @@ from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Int32MultiArray
 from enum import IntEnum
 
+#from algorithm import BasicRun
 from algorithm import BasicRun
 
 # /Info_enemy
@@ -107,7 +108,8 @@ class Condition:
         #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
         return
 
-
+    def getEnemyAttitude(self):
+        return self.getEnemyAttitude()
          
         
     def callback_enemy(self,Info_enemy):

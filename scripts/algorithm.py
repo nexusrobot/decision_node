@@ -5,6 +5,7 @@
 ## https://asukiaaa.blogspot.com/2021/07/rostopic-pub-float32multiarray.html
 ## rostopic pub -r 1 Info_enemy std_msgs/Float32MultiArray "data: [20.0, 20.3]"
 
+from decision_node.scripts.decision_node import EnemyAttitudeIdx
 import rospy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
@@ -22,15 +23,14 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import actionlib_msgs
 #from decision_node.scripts import Condition
 import math as m
+from decision_node.scripts import EnemyAttitudeIdx
 
 
 class WayPoint():
     def __init__(self):
         self.goal_table = [
             ( 0.53,    0,      0),
-            #(    0, 0.53, m.pi/2),
             (-0.53,    0,   m.pi),
-            #(    0,-0.53,-m.pi/2),
         ]
         self.idx = 0
 
@@ -56,15 +56,20 @@ class BasicRun():
         self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
         rospy.loginfo("BasicRun")
 
-    def execute(self, Condition):
+    def execute(self, condition):
         r = rospy.Rate(5) # change speed 5fps
 
         x,y,th = self.wayPoint.getWayPoint()
-        
         rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
-        #self.setGoal(0,-0.5,3.1415)
-        #self.setGoal(x,y,th)
-        self.setGoal(x,y,th)
+        #result = self.setGoal(x,y,th)
+        #rospy.loginfo("result : {}".format(result))
+
+        if condition.getEnemyAttitude() == EnemyAttitudeIdx.FRONT:
+            return False
+        else:
+            return True
+
+
 
 
     def setGoal(self,x,y,yaw):
@@ -93,10 +98,6 @@ class BasicRun():
 
 
 
-if __name__ == '__main__':
-    rospy.init_node('BasicRun_unittest')
-    node = BasicRun()
-    node.run()
 
 
 
