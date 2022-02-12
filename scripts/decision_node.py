@@ -15,6 +15,8 @@ from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Int32MultiArray
 from enum import IntEnum
 
+from algorithm import BasicRun
+
 # /Info_enemy
 # Float32MultiArray
 # 1st elem : enemy distance 0-100  notfound=-1
@@ -61,7 +63,7 @@ class EnemyCondition:
             ( 90,262500),
             (100,144500),
         ]
-        self.tuningRatio = 1.5 #Ratio<1.0でFRONTと判定される範囲が狭くなる。
+        self.tuningRatio = 1.0 #Ratio<1.0でFRONTと判定される範囲が狭くなる。
 
     def getAttitude(self):
         if self.dist == -9999:
@@ -102,14 +104,14 @@ class Condition:
         self.enemyCondition = EnemyCondition()
 
     def update(self):
-        #rospy.loginfo("dis=%f.1, area=%d, %s",self.Info_enemy.data[InfoEnemyIdx.INDEX_DIS], self.green_area, self.enemyCondition.getAttitude())
-        rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+        #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+        return
 
 
          
         
     def callback_enemy(self,Info_enemy):
-        rospy.loginfo("ememy dis=%f",Info_enemy.data[InfoEnemyIdx.INDEX_DIS])
+        #rospy.loginfo("ememy dis=%f",Info_enemy.data[InfoEnemyIdx.INDEX_DIS])
         #rospy.loginfo("ememy dir=%f",Info_enemy.data[InfoEnemyIdx.INDEX_DIR])
         self.Info_enemy = Info_enemy
         self.update()
@@ -121,15 +123,18 @@ class Condition:
         self.update()
 
 
+
 class Decision:
     def __init__(self):
         rospy.loginfo("Decision node")
         self.condition = Condition()
+        self.algo = BasicRun()
 
     def run(self):
         rate = rospy.Rate(5)
 
         while not rospy.is_shutdown():
+            self.algo.execute(self.condition)
             rate.sleep()
 
 
