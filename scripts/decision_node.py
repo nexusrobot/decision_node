@@ -74,6 +74,7 @@ class EnemyCondition:
             (100,144500),
         ]
         self.tuningRatio = 1.0 #Ratio<1.0でFRONTと判定される範囲が狭くなる。
+        
 
     def getAttitude(self):
         if self.dist == -9999:
@@ -84,6 +85,7 @@ class EnemyCondition:
         if self.dist < 0:
             return EnemyAttitudeIdx.INVISIBLE
 
+        area_th = 0
         for d,a in self.dist_area:
             if d > self.dist:
                 hokan_a = (a * d / self.dist)
@@ -112,18 +114,21 @@ class Condition:
         self.info_enemy_sub = rospy.Subscriber('Info_enemy', Float32MultiArray, self.callback_enemy)
         self.info_obstacle_sub = rospy.Subscriber('Info_obstacle', Float32MultiArray, self.callback_obstacle)
         self.enemyCondition = EnemyCondition()
-        self.attitude_pub = rospy.Publisher('attitude_enemy', String)
+        self.attitude_pub = rospy.Publisher('attitude_enemy', String, queue_size=1)
+        #self.enemyAttitude = EnemyAttitudeIdx.INVISIBLE
 
     def update(self):
+        #self.enemyAttitude = self.enemyCondition.getAttitude()
+
         #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-        if self.enemyCondition.getAttitude() == EnemyAttitudeIdx.FRONT:
-            rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-            self.attitude_pub.publish("FRONT")
-        elif self.enemyCondition.getAttitude() == EnemyAttitudeIdx.SIDE:
-            rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-            self.attitude_pub.publish("SIDE")
-        else:
-            self.attitude_pub.publish("NOT FOUND")
+        #if self.enemyCondition.getAttitude() == EnemyAttitudeIdx.FRONT:
+        #    rospy.loginfo("attitude %s",)
+        #    self.attitude_pub.publish("FRONT")
+        #elif self.enemyCondition.getAttitude() == EnemyAttitudeIdx.SIDE:
+        #    rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
+        #    self.attitude_pub.publish("SIDE")
+        #else:
+        #    self.attitude_pub.publish("NOT FOUND")
         return
 
     def getEnemyAttitude(self):
@@ -176,8 +181,11 @@ class WayPoint():
             yield p
 
     def getWayPoint(self):
-        p = self.loadPoint()
-        return p.next()
+        self.currentPoint = self.loadPoint().next()
+        return self.currentPoint
+    
+    def getCurrentWayPoint(self):
+        return self.currentPoint
 
 
 class BasicRun():
@@ -186,43 +194,59 @@ class BasicRun():
         
         # velocity publisher
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
-        self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
 
-        self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', String, self.callback_attitude)
+        #self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
+        self.move_base_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+
+        #self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', String, self.callback_attitude)
 
         rospy.loginfo("BasicRun")
-    
-    def callback_attitude(self,isFront):
-        isFront = str(isFront)
-
-        rospy.loginfo(isFront)
-        if "FRONT" in isFront:
-            rospy.loginfo("Found")
-            self.client.cancel_all_goals()
-        return
-
-    def execute(self, condition):
-        r = rospy.Rate(5) # change speed 5fps
 
         x,y,th = self.wayPoint.getWayPoint()
         rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
         result = self.setGoal(x,y,th)
-        rospy.loginfo("waypoint result : {}".format(result))
+    
+#    def callback_attitude(self,isFront):
+#        isFront = str(isFront)
+#
+#        rospy.loginfo(isFront)
+#        if "FRONT" in isFront:
+#            rospy.loginfo("Found")
+##            self.cancel_goal()
+#        return
 
 
-        rospy.loginfo("waypoint result : {}".format(result))
-        condition.getEnemyAttitude()
+    ## actionlib.GoalStatus.???
+    ## https://docs.ros.org/en/noetic/api/actionlib_msgs/html/msg/GoalStatus.html
+    def execute(self, condition):
+        r = rospy.Rate(5) # change speed 5fps
 
-        if condition.getEnemyAttitude() == EnemyAttitudeIdx.FRONT:
+        self.status = self.move_base_client.get_state()
+        attitude = condition.getEnemyAttitude()
+
+        rospy.loginfo("state {}".format(self.status) )
+
+        if self.status == actionlib.GoalStatus.ACTIVE:
+            rospy.loginfo("active")
+
+        elif self.status == actionlib.GoalStatus.SUCCEEDED:
+            rospy.loginfo("load next goal")
+            x,y,th = self.wayPoint.getWayPoint()
+            rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
+            result = self.setGoal(x,y,th)
+        
+        elif self.status == actionlib.GoalStatus.PENDING:
+            x,y,th = self.wayPoint.getCurrentWayPoint()
+            self.setGoal(x,y,th)
+
+        elif attitude == EnemyAttitudeIdx.FRONT or attitude == EnemyAttitudeIdx.SIDE:
+            rospy.loginfo("attitude : {}".format(attitude))
             return False
         else:
             return True
 
-
-
-
     def setGoal(self,x,y,yaw):
-        self.client.wait_for_server()
+        #self.client.wait_for_server()
 
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
@@ -237,13 +261,19 @@ class BasicRun():
         goal.target_pose.pose.orientation.z = q[2]
         goal.target_pose.pose.orientation.w = q[3]
 
-        self.client.send_goal(goal)
-        wait = self.client.wait_for_result()
-        if not wait:
-            rospy.logerr("Action server not available!")
-            rospy.signal_shutdown("Action server not available!")
-        else:
-            return self.client.get_result()        
+        self.move_base_client.send_goal(goal)
+        rospy.sleep(0.5)
+        rospy.logerr("sendGoal:{},{},{}".format(x,y,yaw))
+        #wait = self.client.wait_for_result()
+        #if not wait:
+        #    rospy.logerr("Action server not available!")
+        #    rospy.signal_shutdown("Action server not available!")
+        #else:
+        #    return self.client.get_result()        
+    
+    def cancel_goal(self):
+        self.move_base_client.cancel_all_goal()
+        return
 
 
 
