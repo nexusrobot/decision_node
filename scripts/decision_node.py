@@ -263,7 +263,7 @@ class BasicRun():
 
         self.move_base_client.send_goal(goal)
         rospy.sleep(0.5)
-        rospy.logerr("sendGoal:{},{},{}".format(x,y,yaw))
+        rospy.loginfo("sendGoal:{},{},{}".format(x,y,yaw))
         #wait = self.client.wait_for_result()
         #if not wait:
         #    rospy.logerr("Action server not available!")
