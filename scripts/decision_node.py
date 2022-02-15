@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# nexusrobot
 
 ## Multiarrayのpub
 ## https://asukiaaa.blogspot.com/2021/07/rostopic-pub-float32multiarray.html
@@ -21,11 +22,7 @@ import tf
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import actionlib_msgs
-#from decision_node.scripts import Condition
 import math as m
-
-#from algorithm import BasicRun
-#from algorithm import BasicRun
 
 # /Info_enemy
 # Float32MultiArray
@@ -115,20 +112,8 @@ class Condition:
         self.info_obstacle_sub = rospy.Subscriber('Info_obstacle', Float32MultiArray, self.callback_obstacle)
         self.enemyCondition = EnemyCondition()
         self.attitude_pub = rospy.Publisher('attitude_enemy', String, queue_size=1)
-        #self.enemyAttitude = EnemyAttitudeIdx.INVISIBLE
 
     def update(self):
-        #self.enemyAttitude = self.enemyCondition.getAttitude()
-
-        #rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-        #if self.enemyCondition.getAttitude() == EnemyAttitudeIdx.FRONT:
-        #    rospy.loginfo("attitude %s",)
-        #    self.attitude_pub.publish("FRONT")
-        #elif self.enemyCondition.getAttitude() == EnemyAttitudeIdx.SIDE:
-        #    rospy.loginfo("attitude %s",self.enemyCondition.getAttitude())
-        #    self.attitude_pub.publish("SIDE")
-        #else:
-        #    self.attitude_pub.publish("NOT FOUND")
         return
 
     def getEnemyAttitude(self):
@@ -163,29 +148,33 @@ class Decision:
             rate.sleep()
 
 
+class TurnDirection(IntEnum):
+    RIGHT_TURN = 1
+    LEFT_TURN = -1
 
 class WayPoint():
-    def __init__(self):
-        self.goal_table = [
-            ( 0.53,    0,      0),
-            (-0.53,    0,   m.pi),
-        ]
+    def __init__(self,waypoint_file):
         self.idx = 0
+#        self.RIGHT_TURN = 1 #const
+#        self.LEFT_TURN = -1 #const
 
-    def loadPoint(self):
-        while True:
-            p = self.goal_table[self.idx]
-            self.idx += 1
-            if self.idx > len(self.goal_table)-1:
-                self.idx = 0
-            yield p
+        with open(waypoint_file,"r") as fp:
+            lines = fp.read().splitlines()
+            self.waypoints = [tuple(map(float,line.split(','))) for line in lines]
+        
 
-    def getWayPoint(self):
-        self.currentPoint = self.loadPoint().next()
-        return self.currentPoint
-    
-    def getCurrentWayPoint(self):
-        return self.currentPoint
+    def getNext(self,turn_direction):
+        max_idx = len(self.waypoints)-1
+
+        self.idx += turn_direction
+        if self.idx > max_idx:
+            self.idx = 0
+        elif self.idx < 0:
+            self.idx = max_idx
+        return self.getCurrent()     
+
+    def getCurrent(self):
+        return self.waypoints[self.idx]
 
 
 class BasicRun():
@@ -194,11 +183,7 @@ class BasicRun():
         
         # velocity publisher
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
-
-        #self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
         self.move_base_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
-
-        #self.attitude_enemy_sub = rospy.Subscriber('attitude_enemy', String, self.callback_attitude)
 
         rospy.loginfo("BasicRun")
 
@@ -206,25 +191,10 @@ class BasicRun():
         rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
         result = self.setGoal(x,y,th)
     
-#    def callback_attitude(self,isFront):
-#        isFront = str(isFront)
-#
-#        rospy.loginfo(isFront)
-#        if "FRONT" in isFront:
-#            rospy.loginfo("Found")
-##            self.cancel_goal()
-#        return
 
-
-    ## actionlib.GoalStatus.???
-    ## https://docs.ros.org/en/noetic/api/actionlib_msgs/html/msg/GoalStatus.html
-    def execute(self, condition):
-        r = rospy.Rate(5) # change speed 5fps
-
+    def runActionlib(self):
         self.status = self.move_base_client.get_state()
-        attitude = condition.getEnemyAttitude()
-
-        rospy.loginfo("state {}".format(self.status) )
+        rospy.loginfo("actionlib status {}".format(self.status))
 
         if self.status == actionlib.GoalStatus.ACTIVE:
             rospy.loginfo("active")
@@ -239,15 +209,26 @@ class BasicRun():
             x,y,th = self.wayPoint.getCurrentWayPoint()
             self.setGoal(x,y,th)
 
-        elif attitude == EnemyAttitudeIdx.FRONT or attitude == EnemyAttitudeIdx.SIDE:
-            rospy.loginfo("attitude : {}".format(attitude))
+        elif self.status == actionlib.GoalStatus.ABORTED:
+            cmd_vel = Twist()
+            cmd_vel.linear.x = 0.5
+            self.direct_twist_pub.publish(cmd_vel)
+
+    ## actionlib.GoalStatus.???
+    ## https://docs.ros.org/en/noetic/api/actionlib_msgs/html/msg/GoalStatus.html
+    def execute(self, condition):
+        r = rospy.Rate(5) # change speed 5fps
+
+        attitude = condition.getEnemyAttitude()
+        if attitude == EnemyAttitudeIdx.FRONT or attitude == EnemyAttitudeIdx.SIDE:
+            rospy.loginfo("Enemy found. attitude = {}".format(attitude))
+            self.cancel_goal()
             return False
         else:
+            self.runActionlib()
             return True
 
     def setGoal(self,x,y,yaw):
-        #self.client.wait_for_server()
-
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
@@ -264,12 +245,6 @@ class BasicRun():
         self.move_base_client.send_goal(goal)
         rospy.sleep(0.5)
         rospy.loginfo("sendGoal:{},{},{}".format(x,y,yaw))
-        #wait = self.client.wait_for_result()
-        #if not wait:
-        #    rospy.logerr("Action server not available!")
-        #    rospy.signal_shutdown("Action server not available!")
-        #else:
-        #    return self.client.get_result()        
     
     def cancel_goal(self):
         self.move_base_client.cancel_all_goal()
@@ -278,9 +253,18 @@ class BasicRun():
 
 
 if __name__ == '__main__':
-    rospy.init_node('DecisionNode')
-    node = Decision()
-    node.run()
+#    rospy.init_node('DecisionNode')
+#    node = Decision()
+#    node.run()
+
+    rospy.init_node('test')
+    way = WayPoint('course1.txt')
+    rospy.loginfo(way.getCurrent())
+
+    for i in range(8):
+        rospy.loginfo(way.getNext(TurnDirection.RIGHT_TURN))
+    for i in range(8):
+        rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
 
 
 
