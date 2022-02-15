@@ -23,6 +23,7 @@ import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import actionlib_msgs
 import math as m
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseWithCovarianceStamped
 
 # /Info_enemy
 # Float32MultiArray
@@ -186,18 +187,27 @@ class WayPoint():
 
 class BasicRun():
     def __init__(self):
-        self.wayPoint = WayPoint()
+        self.wayPoint = WayPoint('/home/ros/catkin_ws/src/decision_node/scripts/course1.txt')
         
         # velocity publisher
         self.vel_pub = rospy.Publisher('cmd_vel', Twist,queue_size=1)
         self.move_base_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
 
+        self.amcl_sub = rospy.Subscriber("amcl_pose", PoseWithCovarianceStamped, self.amclposeCallback)
+
         rospy.loginfo("BasicRun")
 
-        x,y,th = self.wayPoint.getWayPoint()
+        x,y,th = self.wayPoint.getCurrent()
         rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
         result = self.setGoal(x,y,th)
     
+    def amclposeCallback(self, data):
+        self.my_pose_x = data.pose.pose.position.x
+        self.my_pose_y = data.pose.pose.position.y
+        quaternion = data.pose.pose.orientation
+        rpy = tf.transformations.euler_from_quaternion((quaternion.x, quaternion.y, quaternion.z, quaternion.w))
+        self.my_direction_th = rpy[2]
+        rospy.loginfo("amclposeCallback update !!", self.my_pose_x, self.my_pose_y, self.my_direction_th)
 
     def runActionlib(self):
         self.status = self.move_base_client.get_state()
@@ -208,12 +218,12 @@ class BasicRun():
 
         elif self.status == actionlib.GoalStatus.SUCCEEDED:
             rospy.loginfo("load next goal")
-            x,y,th = self.wayPoint.getWayPoint()
+            x,y,th = self.wayPoint.getNext()
             rospy.loginfo("waypoint : {} {} {}".format(x,y,th))
             result = self.setGoal(x,y,th)
         
         elif self.status == actionlib.GoalStatus.PENDING:
-            x,y,th = self.wayPoint.getCurrentWayPoint()
+            x,y,th = self.wayPoint.getCurrent()
             self.setGoal(x,y,th)
 
         elif self.status == actionlib.GoalStatus.ABORTED:
@@ -259,26 +269,26 @@ class BasicRun():
 
 
 
-#if __name__ == '__main__':
-#    rospy.init_node('DecisionNode')
-#    node = Decision()
-#    node.run()
-
-
-## unit test
 if __name__ == '__main__':
-    rospy.init_node('test')
-    way = WayPoint('course1.txt')
-    rospy.loginfo(way.getCurrent())
+    rospy.init_node('DecisionNode')
+    node = Decision()
+    node.run()
 
-    for i in range(4):
-        rospy.loginfo(way.getNext(TurnDirection.RIGHT_TURN))
-    for i in range(4):
-        rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
-    
-    rospy.loginfo(way.getNearest(-0.51, 0.0))
-    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
-    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+
+### unit test
+#if __name__ == '__main__':
+#    rospy.init_node('test')
+#    way = WayPoint('course1.txt')
+#    rospy.loginfo(way.getCurrent())
+#
+#    for i in range(4):
+#        rospy.loginfo(way.getNext(TurnDirection.RIGHT_TURN))
+#    for i in range(4):
+#        rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+#    
+#    rospy.loginfo(way.getNearest(-0.51, 0.0))
+#    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+#    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
 
 
 
