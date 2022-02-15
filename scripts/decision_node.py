@@ -155,13 +155,10 @@ class TurnDirection(IntEnum):
 class WayPoint():
     def __init__(self,waypoint_file):
         self.idx = 0
-#        self.RIGHT_TURN = 1 #const
-#        self.LEFT_TURN = -1 #const
 
         with open(waypoint_file,"r") as fp:
             lines = fp.read().splitlines()
             self.waypoints = [tuple(map(float,line.split(','))) for line in lines]
-        
 
     def getNext(self,turn_direction):
         max_idx = len(self.waypoints)-1
@@ -175,6 +172,16 @@ class WayPoint():
 
     def getCurrent(self):
         return self.waypoints[self.idx]
+
+    #現在地から一番近いwaypointを探し、そのpointを返す
+    def getNearest(self, x0, y0):
+        cost = []
+        for n,w in enumerate(self.waypoints):
+            dist = m.sqrt((w[0] - x0)**2 + (w[1] - y0)**2)
+            cost.append((dist, w, n))
+        dist,point,idx = min(cost, key = lambda x: x[0])
+        self.idx = idx
+        return point
 
 
 class BasicRun():
@@ -252,19 +259,27 @@ class BasicRun():
 
 
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
 #    rospy.init_node('DecisionNode')
 #    node = Decision()
 #    node.run()
 
+
+## unit test
+if __name__ == '__main__':
     rospy.init_node('test')
     way = WayPoint('course1.txt')
     rospy.loginfo(way.getCurrent())
 
-    for i in range(8):
+    for i in range(4):
         rospy.loginfo(way.getNext(TurnDirection.RIGHT_TURN))
-    for i in range(8):
+    for i in range(4):
         rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+    
+    rospy.loginfo(way.getNearest(-0.51, 0.0))
+    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+    rospy.loginfo(way.getNext(TurnDirection.LEFT_TURN))
+
 
 
 
